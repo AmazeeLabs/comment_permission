@@ -1,0 +1,6 @@
+name = "Custom Comment Permissions"
+description = "Provides additional permissions for comments."
+core = 7.x
+package = Custom
+
+dependencies[] = comment

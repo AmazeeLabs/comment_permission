@@ -1,0 +1,121 @@
+<?php
+
+/**
+ * @file
+ * Provides additional permissions for comments.
+ */
+
+define('COMMENT_PERMISSION_POST_IF_OG_MEMBER', ': post comments if og member');
+define('COMMENT_PERMISSION_POST_ON_OWN', ': post comments on own');
+define('COMMENT_PERMISSION_POST_ON_ANY', ': post comments on any');
+
+/**
+ * Implements hook_permission().
+ */
+function comment_permission_permission() {
+  $permissions = array();
+  foreach (node_type_get_types() as $node_type) {
+    if (_comment_permission_is_og_node_type($node_type->type)) {
+      $permissions[$node_type->type . COMMENT_PERMISSION_POST_IF_OG_MEMBER] = array(
+        'title' => t('%node_type: post comments if user is OG member of this content', array('%node_type' => $node_type->name)),
+        'description' => '',
+      );
+    }
+    $permissions[$node_type->type . COMMENT_PERMISSION_POST_ON_OWN] = array(
+      'title' => t('%node_type: post comments on own content', array('%node_type' => $node_type->name)),
+      'description' => '',
+    );
+    $permissions[$node_type->type . COMMENT_PERMISSION_POST_ON_ANY] = array(
+      'title' => t('%node_type: post comments on any content', array('%node_type' => $node_type->name)),
+      'description' => '',
+    );
+  }
+  return $permissions;
+}
+
+/**
+ * Implementation of hook_node_view_alter().
+ */
+function comment_permission_node_view_alter(&$build) {
+
+  // For the standard node render process.
+  if (!_comment_permission_post_access($build['#node'])) {
+    unset($build['comments']['comment_form']);
+    unset($build['links']['comment']['#links']['comment-add']);
+    unset($build['comments']);
+    unset($build['links']['comment']);
+  }
+}
+
+/**
+ * Implements hook_panels_panes_prepared_alter().
+ */
+function comment_permission_panels_panes_prepared_alter(&$panes, $renderer) {
+
+  // For the case if comment form is rendered by panelizer.
+  foreach ($panes as $key => $pane) {
+    if (isset($pane->type) && $pane->type == 'node_comment_form') {
+      if (isset($pane->configuration['context'])) {
+        $context = $pane->configuration['context'];
+        if (!empty($renderer->display->context[$context]->data)) {
+          $node = $renderer->display->context[$context]->data;
+          if (!_comment_permission_post_access($node)) {
+            unset($panes[$key]);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function comment_permission_form_comment_form_alter(&$form, &$form_state) {
+  if (!_comment_permission_post_access($form['#node'])) {
+    // We should newer reach this line. However, comment form could be embedded
+    // with a non standard workflow, so we ensure that user can't use the form.
+    $form['#access'] = FALSE;
+  }
+}
+
+/**
+ * Checks that node type is an OG group.
+ *
+ * @param string $node_type
+ *   Machine name of a node type.
+ *
+ * @return bool
+ */
+function _comment_permission_is_og_node_type($node_type) {
+  return (module_invoke('og', 'is_group_content_type', 'node', $node_type) || module_invoke('og', 'is_group_type', 'node', $node_type));
+}
+
+/**
+ * Checks if user is able to post comments on a node.
+ *
+ * @param object $node
+ *   Node object.
+ * @param object|null $account
+ *   User account object.
+ *
+ * @return bool
+ */
+function _comment_permission_post_access($node, $account = NULL) {
+  if ($account === NULL) {
+    $account = $GLOBALS['user'];
+  }
+  if ($account->uid == 1) {
+    return TRUE;
+  }
+  if (_comment_permission_is_og_node_type($node->type) && user_access($node->type . COMMENT_PERMISSION_POST_IF_OG_MEMBER, $account) && module_invoke('og', 'is_member', 'node', $node->nid, 'user', $account)) {
+    return TRUE;
+  }
+  if (user_access($node->type . COMMENT_PERMISSION_POST_ON_OWN) && $node->uid == $account->uid) {
+    return TRUE;
+  }
+  if (user_access($node->type . COMMENT_PERMISSION_POST_ON_ANY)) {
+    return TRUE;
+  }
+  return FALSE;
+}
