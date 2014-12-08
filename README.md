@@ -10,7 +10,8 @@ to configure the additional permissions first.
 User should have the "post comments" permission in addition to the ones provided
 by this module.
 
-For the moment only "post" permissions are available.
+All permissions are split up by node types. For the moment only post/delete
+permissions are available.
 
 There is no OG dependency, however, if OG is installed, additional OG-related
 permissions are available.

@@ -9,13 +9,21 @@ define('COMMENT_PERMISSION_POST_IF_OG_MEMBER', ': post comments if og member');
 define('COMMENT_PERMISSION_POST_ON_OWN', ': post comments on own');
 define('COMMENT_PERMISSION_POST_ON_ANY', ': post comments on any');
 
+define('COMMENT_PERMISSION_DELETE_OWN', ': delete own comments');
+define('COMMENT_PERMISSION_DELETE_IF_OG_MEMBER', ': delete comments if og member');
+define('COMMENT_PERMISSION_DELETE_ON_OWN', ': delete comments on own');
+define('COMMENT_PERMISSION_DELETE_ON_ANY', ': delete comments on any');
+
 /**
  * Implements hook_permission().
  */
 function comment_permission_permission() {
   $permissions = array();
   foreach (node_type_get_types() as $node_type) {
-    if (_comment_permission_is_og_node_type($node_type->type)) {
+    $is_og_type = _comment_permission_is_og_node_type($node_type->type);
+
+    // Post group.
+    if ($is_og_type) {
       $permissions[$node_type->type . COMMENT_PERMISSION_POST_IF_OG_MEMBER] = array(
         'title' => t('%node_type: post comments if user is OG member of this content', array('%node_type' => $node_type->name)),
         'description' => '',
@@ -29,8 +37,79 @@ function comment_permission_permission() {
       'title' => t('%node_type: post comments on any content', array('%node_type' => $node_type->name)),
       'description' => '',
     );
+
+    // Delete group.
+    $permissions[$node_type->type . COMMENT_PERMISSION_DELETE_OWN] = array(
+      'title' => t('%node_type: delete own comments', array('%node_type' => $node_type->name)),
+      'description' => '',
+    );
+    if ($is_og_type) {
+      $permissions[$node_type->type . COMMENT_PERMISSION_DELETE_IF_OG_MEMBER] = array(
+        'title' => t('%node_type: delete comments if user is OG member of this content', array('%node_type' => $node_type->name)),
+        'description' => '',
+      );
+    }
+    $permissions[$node_type->type . COMMENT_PERMISSION_DELETE_ON_OWN] = array(
+      'title' => t('%node_type: delete comments on own content', array('%node_type' => $node_type->name)),
+      'description' => '',
+    );
+    $permissions[$node_type->type . COMMENT_PERMISSION_DELETE_ON_ANY] = array(
+      'title' => t('%node_type: delete comments on any content', array('%node_type' => $node_type->name)),
+      'description' => '',
+    );
   }
   return $permissions;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function comment_permission_menu_alter(&$items) {
+  $items['comment/%/delete']['access callback'] = 'comment_permission_delete_comment_access';
+  $items['comment/%/delete']['access arguments'] = array(1);
+}
+
+/**
+ * Access callback for the comment/%/delete path.
+ *
+ * @param int $comment
+ *   Comment ID.
+ *
+ * @return bool
+ */
+function comment_permission_delete_comment_access($comment) {
+  if (user_access('administer comments')) {
+    return TRUE;
+  }
+  $account = $GLOBALS['user'];
+  if (is_numeric($comment)) {
+    $comment = comment_load($comment);
+  }
+  if (!is_object($comment)) {
+    return FALSE;
+  }
+  $node = NULL;
+  if ($comment->uid == $account->uid) {
+    if (($node = node_load($comment->nid)) && user_access($node->type . COMMENT_PERMISSION_DELETE_OWN)) {
+      return TRUE;
+    }
+  }
+  if ($node === NULL) {
+    $node = node_load($comment->nid);
+  }
+  if (!$node) {
+    return FALSE;
+  }
+  if ($node->uid == $account->uid && user_access($node->type . COMMENT_PERMISSION_DELETE_ON_OWN)) {
+    return TRUE;
+  }
+  if (user_access($node->type . COMMENT_PERMISSION_DELETE_ON_ANY)) {
+    return TRUE;
+  }
+  if (_comment_permission_is_og_node_type($node->type) && user_access($node->type . COMMENT_PERMISSION_DELETE_IF_OG_MEMBER) && module_invoke('og', 'is_member', 'node', $node->nid, 'user', $account)) {
+    return TRUE;
+  }
+  return FALSE;
 }
 
 /**
