@@ -67,6 +67,24 @@ function comment_permission_permission() {
 function comment_permission_menu_alter(&$items) {
   $items['comment/%/delete']['access callback'] = 'comment_permission_delete_comment_access';
   $items['comment/%/delete']['access arguments'] = array(1);
+
+  $items['comment/reply/%node']['access callback'] = 'comment_permission_comment_reply_access';
+  $items['comment/reply/%node']['access arguments'] = array(2);
+}
+
+/**
+ * Access callback for the comment/reply/%node path.
+ *
+ * @param object $node
+ *   Node object.
+ *
+ * @return bool
+ */
+function comment_permission_comment_reply_access($node) {
+  if (!node_access('view', $node)) {
+    return FALSE;
+  }
+  return _comment_permission_post_access($node);
 }
 
 /**
@@ -110,6 +128,15 @@ function comment_permission_delete_comment_access($comment) {
     return TRUE;
   }
   return FALSE;
+}
+
+/**
+ * Implements hook_comment_view_alter().
+ */
+function comment_permission_comment_view_alter(&$build) {
+  if (!_comment_permission_post_access($build['#node'])) {
+    unset($build['links']['comment']['#links']['comment-reply']);
+  }
 }
 
 /**
